@@ -1,50 +1,39 @@
 import { useState, useRef, useEffect } from "react";
-// import { Web3StorageProvider, useWeb3Storage } from "./web3StorageContext";
 import Button from "@mui/material/Button";
 import { AudioVisualizer } from "./AudioVisualizer";
+import { useMicrophone } from "../context/MicrophoneContext";
+import { MicAccess } from "./MicAccess";
 
-// import { AudioRecorder } from "react-audio-voice-recorder";
-const mimeType = "audio/webm";
-
-const MicrophoneAccess = () => {
-  return navigator.mediaDevices.getUserMedia !== null;
-};
-
-export const AudioRecorder = () => {
-  const [permission, setPermission] = useState(false);
-  const [isVisualizing, setIsVisualizing] = useState(false);
-  const [stream, setStream] = useState(null);
+export const Recorder = () => {
   const [analyser, setAnalyser] = useState(null);
   const mediaRecorder = useRef(null);
-  const [audioChunks, setAudioChunks] = useState([]);
+  // const [audioChunks, setAudioChunks] = useState([]);
   const [audio, setAudio] = useState(null);
   const mimeType = "audio/webm"; // Adjust the MIME type based on your requirements.
   const [isRecording, setIsRecording] = useState(false);
+  const [audioRecordings, setAudioRecordings] = useState([]); // Array to store recorded audio blobs
 
-  const getMicrophonePermission = async () => {
-    try {
-      const streamData = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: false,
-      });
-      setPermission(true);
-      setStream(streamData);
-    } catch (err) {
-      alert(err.message);
-    }
-  };
+  const {
+    requestMicrophoneAccess,
+    permission,
+    audioStream: stream,
+  } = useMicrophone();
 
   const startRecording = () => {
     const media = new MediaRecorder(stream, { type: mimeType });
     mediaRecorder.current = media;
+    const chunks = [];
+
     mediaRecorder.current.ondataavailable = (event) => {
       if (event.data.size > 0) {
-        setAudioChunks((prevChunks) => [...prevChunks, event.data]);
+        chunks.push(event.data);
       }
     };
+
     mediaRecorder.current.onstop = () => {
-      const audioBlob = new Blob(audioChunks, { type: mimeType });
+      const audioBlob = new Blob(chunks, { type: mimeType });
       setAudio(audioBlob);
+      setAudioRecordings((prevRecordings) => [...prevRecordings, audioBlob]);
     };
     mediaRecorder.current.start();
     setIsRecording(true);
@@ -61,19 +50,15 @@ export const AudioRecorder = () => {
       const microphoneSource = audioContext.createMediaStreamSource(stream);
       microphoneSource.connect(analyser);
 
-      // Pass the analyser instance to the AudioVisualizer component
       setAnalyser(analyser);
-
-      // Start the visualization
-      setIsVisualizing(true);
     };
   };
-
   const stopRecording = () => {
     if (mediaRecorder.current.state === "recording") {
       mediaRecorder.current.stop();
     }
     setIsRecording(false);
+    setAudio(null);
   };
 
   const downloadRecording = () => {
@@ -90,13 +75,15 @@ export const AudioRecorder = () => {
 
   return (
     <div>
-      <h2>Audio Recorder</h2>
       <main>
         <div className="audio-controls">
           {!permission ? (
-            <Button onClick={getMicrophonePermission} type="button">
-              Get Microphone
-            </Button>
+            <>
+              <Button onClick={requestMicrophoneAccess} type="button">
+                Connect Microphone
+              </Button>
+              <MicAccess />
+            </>
           ) : !isRecording ? (
             <Button
               fullWidth
@@ -120,6 +107,34 @@ export const AudioRecorder = () => {
             <AudioVisualizer analyser={analyser} />
           )}{" "}
         </div>
+        <>
+          {audioRecordings.length > 0 && (
+            <div>
+              <h3>Recordings: </h3>
+              {audioRecordings.map((recording, index) => {
+                console.log(recording, " recording");
+                return (
+                  <div key={index}>
+                    <audio controls>
+                      <source
+                        src={URL.createObjectURL(recording)}
+                        type={mimeType}
+                      />
+                    </audio>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {/* {audioRecordings.length > 0 && (
+            <div>
+              <h3>Recordings:</h3>
+              {audioRecordings.map((recording, index) => (
+                <div key={index}>{recording}</div>
+              )}
+            </div>
+          )} */}
+        </>
       </main>
     </div>
   );
